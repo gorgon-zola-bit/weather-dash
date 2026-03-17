@@ -2,22 +2,32 @@ import { useState, useEffect, useCallback } from 'react';
 import type { TransitRoute } from '../types';
 import { TRANSIT_STOPS, TRANSIT_REFRESH_MS } from '../config';
 
-// Use the NextBus/Umo public XML feed for SF Muni real-time predictions.
-// This API is free, requires no key, and supports CORS.
-const NEXTBUS_BASE =
-  'https://retro.umoiq.com/service/publicXMLFeed';
+// Try fetching with CORS proxy fallback
+async function fetchWithCorsFallback(url: string): Promise<string> {
+  // Try direct first
+  try {
+    const res = await fetch(url);
+    if (res.ok) return await res.text();
+  } catch {
+    // CORS or network error — try proxy
+  }
 
-function parseMinutes(epochMs: string): number {
+  // Fallback: corsproxy.io
+  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
+  return await res.text();
+}
+
+function parseMinutesFromEpoch(epochMs: string): number {
   return Math.max(0, Math.round((parseInt(epochMs, 10) - Date.now()) / 60000));
 }
 
 async function fetchStopPredictions(
   stopId: string
 ): Promise<{ minutes: number }[]> {
-  const url = `${NEXTBUS_BASE}?command=predictions&a=sf-muni&stopId=${stopId}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`NextBus: ${res.status}`);
-  const text = await res.text();
+  const url = `https://retro.umoiq.com/service/publicXMLFeed?command=predictions&a=sf-muni&stopId=${stopId}`;
+  const text = await fetchWithCorsFallback(url);
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'text/xml');
 
@@ -26,11 +36,10 @@ async function fetchStopPredictions(
   predictions.forEach((el) => {
     const epochTime = el.getAttribute('epochTime');
     if (epochTime) {
-      arrivals.push({ minutes: parseMinutes(epochTime) });
+      arrivals.push({ minutes: parseMinutesFromEpoch(epochTime) });
     }
   });
 
-  // Sort by soonest and take top 3
   arrivals.sort((a, b) => a.minutes - b.minutes);
   return arrivals.slice(0, 3);
 }
