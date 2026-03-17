@@ -47,12 +47,12 @@ The dashboard monitors these stops (configured in `src/config.ts`):
 
 | Route | Direction | Stop | Stop ID |
 |-------|-----------|------|---------|
-| 22 Fillmore | Inbound | Fillmore St & Haight St | 15553 |
-| 22 Fillmore | Outbound | Fillmore St & Haight St | 15554 |
-| N Judah | Inbound | Carl St & Cole St | 16992 |
-| N Judah | Outbound | Carl St & Cole St | 16993 |
-| 7 Haight/Noriega | Inbound | Haight St & Masonic Ave | 15727 |
-| 7 Haight/Noriega | Outbound | Haight St & Masonic Ave | 15726 |
+| 22 Fillmore | Inbound | Fillmore St & Oak St | 14632 |
+| 22 Fillmore | Outbound | Fillmore St & Oak St | 14631 |
+| N Judah | Inbound | Duboce Ave & Church St | 14447 |
+| N Judah | Outbound | Duboce Ave & Church St | 14448 |
+| 7 Haight/Noriega | Inbound | Haight St & Fillmore St | 14953 |
+| 7 Haight/Noriega | Outbound | Haight St & Fillmore St | 14952 |
 
 ### Changing Stops
 

@@ -9,40 +9,40 @@ import type { TransitStop } from './types';
 
 export const TRANSIT_STOPS: TransitStop[] = [
   {
-    stopId: '15553',
+    stopId: '14632',
     routeName: '22 Fillmore',
     direction: 'Inbound',
-    stopName: 'Fillmore St & Haight St',
+    stopName: 'Fillmore St & Oak St',
   },
   {
-    stopId: '15554',
+    stopId: '14631',
     routeName: '22 Fillmore',
     direction: 'Outbound',
-    stopName: 'Fillmore St & Haight St',
+    stopName: 'Fillmore St & Oak St',
   },
   {
-    stopId: '16992',
+    stopId: '14447',
     routeName: 'N Judah',
     direction: 'Inbound',
-    stopName: 'Carl St & Cole St',
+    stopName: 'Duboce Ave & Church St',
   },
   {
-    stopId: '16993',
+    stopId: '14448',
     routeName: 'N Judah',
     direction: 'Outbound',
-    stopName: 'Carl St & Cole St',
+    stopName: 'Duboce Ave & Church St',
   },
   {
-    stopId: '15727',
+    stopId: '14953',
     routeName: '7 Haight/Noriega',
     direction: 'Inbound',
-    stopName: 'Haight St & Masonic Ave',
+    stopName: 'Haight St & Fillmore St',
   },
   {
-    stopId: '15726',
+    stopId: '14952',
     routeName: '7 Haight/Noriega',
     direction: 'Outbound',
-    stopName: 'Haight St & Masonic Ave',
+    stopName: 'Haight St & Fillmore St',
   },
 ];
 
