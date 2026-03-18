@@ -51,7 +51,7 @@ export const TRANSIT_STOPS: TransitStop[] = [
 export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 // Refresh intervals (ms)
-export const TRANSIT_REFRESH_MS = 60_000; // 60 seconds
+export const TRANSIT_REFRESH_MS = 600_000; // 10 minutes (511 API limit: 60 req/hr, 6 stops per refresh)
 export const WEATHER_REFRESH_MS = 900_000; // 15 minutes
 
 // San Francisco coordinates

@@ -43,7 +43,7 @@ async function fetchStopPredictions(
     `https://api.511.org/transit/StopMonitoring` +
     `?api_key=${TRANSIT_API_KEY}` +
     `&agency=SF` +
-    `&stopCode=${stopId}` +
+    `&stopcode=${stopId}` +
     `&format=json`;
 
   const res = await fetchWithCorsFallback(url);
