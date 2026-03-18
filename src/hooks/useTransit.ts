@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import type { TransitRoute } from '../types';
 import { TRANSIT_STOPS, TRANSIT_REFRESH_MS } from '../config';
 
-// Try fetching with CORS proxy fallback
-async function fetchWithCorsFallback(url: string): Promise<string> {
-  // Try direct first
+const TRANSIT_API_KEY = '3ca48652-5b64-47fe-b4e4-15ef24009429';
+
+// 511.org doesn't send CORS headers, so we need a proxy for browser use
+async function fetchWithCorsFallback(url: string): Promise<Response> {
+  // Try direct first (works if CORS is enabled or same-origin)
   try {
     const res = await fetch(url);
-    if (res.ok) return await res.text();
+    if (res.ok) return res;
   } catch {
     // CORS or network error — try proxy
   }
@@ -16,29 +18,61 @@ async function fetchWithCorsFallback(url: string): Promise<string> {
   const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
   const res = await fetch(proxyUrl);
   if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
-  return await res.text();
+  return res;
 }
 
-function parseMinutesFromEpoch(epochMs: string): number {
-  return Math.max(0, Math.round((parseInt(epochMs, 10) - Date.now()) / 60000));
+interface SiriMonitoredCall {
+  ExpectedArrivalTime?: string;
+  AimedArrivalTime?: string;
+}
+
+interface SiriMonitoredVehicleJourney {
+  PublishedLineName: string;
+  DirectionRef: string;
+  MonitoredCall?: SiriMonitoredCall;
+}
+
+interface SiriMonitoredStopVisit {
+  MonitoredVehicleJourney: SiriMonitoredVehicleJourney;
 }
 
 async function fetchStopPredictions(
   stopId: string
 ): Promise<{ minutes: number }[]> {
-  const url = `https://retro.umoiq.com/service/publicXMLFeed?command=predictions&a=sf-muni&stopId=${stopId}`;
-  const text = await fetchWithCorsFallback(url);
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(text, 'text/xml');
+  const url =
+    `https://api.511.org/transit/StopMonitoring` +
+    `?api_key=${TRANSIT_API_KEY}` +
+    `&agency=SF` +
+    `&stopCode=${stopId}` +
+    `&format=json`;
 
+  const res = await fetchWithCorsFallback(url);
+  let text = await res.text();
+  // 511.org sometimes prepends a BOM character
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
+  const data = JSON.parse(text);
+
+  const deliveries =
+    data?.ServiceDelivery?.StopMonitoringDelivery;
+  if (!deliveries || deliveries.length === 0) return [];
+
+  const visits: SiriMonitoredStopVisit[] =
+    deliveries[0]?.MonitoredStopVisit ?? [];
+
+  const now = Date.now();
   const arrivals: { minutes: number }[] = [];
-  const predictions = doc.querySelectorAll('prediction');
-  predictions.forEach((el) => {
-    const epochTime = el.getAttribute('epochTime');
-    if (epochTime) {
-      arrivals.push({ minutes: parseMinutesFromEpoch(epochTime) });
-    }
-  });
+
+  for (const visit of visits) {
+    const call = visit.MonitoredVehicleJourney?.MonitoredCall;
+    const timeStr = call?.ExpectedArrivalTime ?? call?.AimedArrivalTime;
+    if (!timeStr) continue;
+
+    const arrivalMs = new Date(timeStr).getTime();
+    const minutes = Math.max(0, Math.round((arrivalMs - now) / 60000));
+    arrivals.push({ minutes });
+  }
 
   arrivals.sort((a, b) => a.minutes - b.minutes);
   return arrivals.slice(0, 3);
@@ -80,8 +114,14 @@ export function useTransit() {
         })
       );
       setRoutes(results);
-      setLastUpdated(new Date());
-      setIsStale(false);
+      // Mark as successfully updated if at least one route loaded
+      const anySuccess = results.some((r) => !r.error);
+      if (anySuccess) {
+        setLastUpdated(new Date());
+        setIsStale(false);
+      } else {
+        setIsStale(true);
+      }
     } catch {
       setIsStale(true);
     }
