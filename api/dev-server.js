@@ -72,8 +72,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const deliveries =
-        body?.ServiceDelivery?.StopMonitoringDelivery?.MonitoredStopVisit || [];
+      // StopMonitoringDelivery can be an array or a single object
+      const delivery = body?.ServiceDelivery?.StopMonitoringDelivery;
+      let deliveries = [];
+      if (Array.isArray(delivery)) {
+        deliveries = delivery[0]?.MonitoredStopVisit ?? [];
+      } else if (delivery) {
+        deliveries = delivery.MonitoredStopVisit ?? [];
+      }
 
       const arrivals = deliveries
         .map((visit) => {

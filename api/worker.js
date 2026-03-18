@@ -57,8 +57,14 @@ async function handleTransit(url, env) {
     text = text.replace(/^\uFEFF/, '');
     const data = JSON.parse(text);
 
-    const deliveries =
-      data?.ServiceDelivery?.StopMonitoringDelivery?.MonitoredStopVisit || [];
+    // StopMonitoringDelivery can be an array or a single object
+    const smd = data?.ServiceDelivery?.StopMonitoringDelivery;
+    let deliveries = [];
+    if (Array.isArray(smd)) {
+      deliveries = smd[0]?.MonitoredStopVisit ?? [];
+    } else if (smd) {
+      deliveries = smd.MonitoredStopVisit ?? [];
+    }
 
     const arrivals = deliveries
       .map((visit) => {

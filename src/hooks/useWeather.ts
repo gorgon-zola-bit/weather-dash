@@ -55,6 +55,7 @@ export function useWeather() {
       const url =
         `https://api.open-meteo.com/v1/forecast` +
         `?latitude=${SF_LAT}&longitude=${SF_LON}` +
+        `&current=temperature_2m,apparent_temperature,weather_code,is_day,precipitation` +
         `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day` +
         `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
         `&temperature_unit=fahrenheit` +
@@ -69,16 +70,30 @@ export function useWeather() {
       const currentHour = now.getHours();
       const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
-      // Parse hourly data for today (remaining hours)
+      // Build "Now" entry from current conditions (real-time, not forecast)
+      const current = data.current;
+      const currentWeatherCode = current.weather_code;
+      const currentIsDay = current.is_day === 1;
+      const nowEntry: HourlyWeather = {
+        time: Math.floor(now.getTime() / 1000), // use actual now so isCurrentHour() matches
+        temp: Math.round(current.temperature_2m),
+        feelsLike: Math.round(current.apparent_temperature),
+        description: wmoDescription(currentWeatherCode),
+        icon: wmoToOwmIcon(currentWeatherCode, currentIsDay),
+        precipProbability: 0,
+        precipAmount: current.precipitation ?? 0,
+      };
+
+      // Parse hourly data for today (future hours only, skip current hour)
       const hourlyTimes: string[] = data.hourly.time;
-      const hourly: HourlyWeather[] = [];
+      const hourly: HourlyWeather[] = [nowEntry];
 
       for (let i = 0; i < hourlyTimes.length; i++) {
         const timeStr = hourlyTimes[i]; // "2026-03-17T14:00"
         const date = timeStr.slice(0, 10);
         const hour = parseInt(timeStr.slice(11, 13), 10);
 
-        if (date === todayStr && hour >= currentHour) {
+        if (date === todayStr && hour > currentHour) {
           const weatherCode = data.hourly.weather_code[i];
           const isDay = data.hourly.is_day[i] === 1;
           hourly.push({

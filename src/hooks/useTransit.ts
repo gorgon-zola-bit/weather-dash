@@ -1,26 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TransitRoute } from '../types';
-import { TRANSIT_STOPS, TRANSIT_REFRESH_MS } from '../config';
+import { TRANSIT_STOPS, TRANSIT_REFRESH_MS, API_BASE } from '../config';
 
-const TRANSIT_API_KEY = '3ca48652-5b64-47fe-b4e4-15ef24009429';
 const COUNTDOWN_INTERVAL_MS = 15_000; // Recalculate displayed minutes every 15s
-
-// 511.org doesn't send CORS headers, so we need a proxy for browser use
-async function fetchWithCorsFallback(url: string): Promise<Response> {
-  // Try direct first (works if CORS is enabled or same-origin)
-  try {
-    const res = await fetch(url);
-    if (res.ok) return res;
-  } catch {
-    // CORS or network error — try proxy
-  }
-
-  // Fallback: corsproxy.io
-  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
-  const res = await fetch(proxyUrl);
-  if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
-  return res;
-}
 
 // Stored arrival with absolute timestamp so we can recompute minutes locally
 interface StoredArrival {
@@ -38,51 +20,20 @@ interface StoredRoute {
 async function fetchStopPredictions(
   stopId: string
 ): Promise<StoredArrival[]> {
-  const url =
-    `https://api.511.org/transit/StopMonitoring` +
-    `?api_key=${TRANSIT_API_KEY}` +
-    `&agency=SF` +
-    `&stopCode=${stopId}` +
-    `&format=json`;
+  const res = await fetch(`${API_BASE}/transit?stopId=${stopId}`);
+  if (!res.ok) throw new Error(`Transit proxy error: ${res.status}`);
+  const data = await res.json();
 
-  const res = await fetchWithCorsFallback(url);
-  let text = await res.text();
-  // 511.org sometimes prepends a BOM character
-  if (text.charCodeAt(0) === 0xfeff) {
-    text = text.slice(1);
-  }
-  const data = JSON.parse(text);
+  const now = Date.now();
+  // The proxy returns { arrivals: [{ minutes: N }] }
+  // Convert minutes back to absolute timestamps for local countdown
+  const arrivals: StoredArrival[] = (data.arrivals ?? []).map(
+    (a: { minutes: number }) => ({
+      arrivalTime: now + a.minutes * 60000,
+    })
+  );
 
-  // Handle StopMonitoringDelivery as either an array or a single object
-  const delivery = data?.ServiceDelivery?.StopMonitoringDelivery;
-  let visits: unknown[] = [];
-  if (Array.isArray(delivery)) {
-    visits = delivery[0]?.MonitoredStopVisit ?? [];
-  } else if (delivery) {
-    visits = delivery.MonitoredStopVisit ?? [];
-  }
-
-  const arrivals: StoredArrival[] = [];
-
-  for (const visit of visits) {
-    const mvj = (visit as Record<string, unknown>)?.MonitoredVehicleJourney as
-      | Record<string, unknown>
-      | undefined;
-    const call = mvj?.MonitoredCall as Record<string, unknown> | undefined;
-    const timeStr =
-      (call?.ExpectedArrivalTime as string) ??
-      (call?.ExpectedDepartureTime as string) ??
-      (call?.AimedArrivalTime as string);
-    if (!timeStr) continue;
-
-    const arrivalTime = new Date(timeStr).getTime();
-    if (!Number.isNaN(arrivalTime)) {
-      arrivals.push({ arrivalTime });
-    }
-  }
-
-  arrivals.sort((a, b) => a.arrivalTime - b.arrivalTime);
-  return arrivals.slice(0, 3);
+  return arrivals;
 }
 
 /** Recompute display minutes from stored absolute timestamps */
