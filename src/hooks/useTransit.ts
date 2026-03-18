@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TransitRoute } from '../types';
 import { TRANSIT_STOPS, TRANSIT_REFRESH_MS } from '../config';
 
 const TRANSIT_API_KEY = '3ca48652-5b64-47fe-b4e4-15ef24009429';
+const COUNTDOWN_INTERVAL_MS = 15_000; // Recalculate displayed minutes every 15s
 
 // 511.org doesn't send CORS headers, so we need a proxy for browser use
 async function fetchWithCorsFallback(url: string): Promise<Response> {
@@ -21,29 +22,27 @@ async function fetchWithCorsFallback(url: string): Promise<Response> {
   return res;
 }
 
-interface SiriMonitoredCall {
-  ExpectedArrivalTime?: string;
-  AimedArrivalTime?: string;
+// Stored arrival with absolute timestamp so we can recompute minutes locally
+interface StoredArrival {
+  arrivalTime: number; // epoch ms
 }
 
-interface SiriMonitoredVehicleJourney {
-  PublishedLineName: string;
-  DirectionRef: string;
-  MonitoredCall?: SiriMonitoredCall;
-}
-
-interface SiriMonitoredStopVisit {
-  MonitoredVehicleJourney: SiriMonitoredVehicleJourney;
+interface StoredRoute {
+  routeName: string;
+  direction: string;
+  stopName: string;
+  arrivals: StoredArrival[];
+  error?: string;
 }
 
 async function fetchStopPredictions(
   stopId: string
-): Promise<{ minutes: number }[]> {
+): Promise<StoredArrival[]> {
   const url =
     `https://api.511.org/transit/StopMonitoring` +
     `?api_key=${TRANSIT_API_KEY}` +
     `&agency=SF` +
-    `&stopcode=${stopId}` +
+    `&stopCode=${stopId}` +
     `&format=json`;
 
   const res = await fetchWithCorsFallback(url);
@@ -54,38 +53,67 @@ async function fetchStopPredictions(
   }
   const data = JSON.parse(text);
 
-  const deliveries =
-    data?.ServiceDelivery?.StopMonitoringDelivery;
-  if (!deliveries || deliveries.length === 0) return [];
-
-  const visits: SiriMonitoredStopVisit[] =
-    deliveries[0]?.MonitoredStopVisit ?? [];
-
-  const now = Date.now();
-  const arrivals: { minutes: number }[] = [];
-
-  for (const visit of visits) {
-    const call = visit.MonitoredVehicleJourney?.MonitoredCall;
-    const timeStr = call?.ExpectedArrivalTime ?? call?.AimedArrivalTime;
-    if (!timeStr) continue;
-
-    const arrivalMs = new Date(timeStr).getTime();
-    const minutes = Math.max(0, Math.round((arrivalMs - now) / 60000));
-    arrivals.push({ minutes });
+  // Handle StopMonitoringDelivery as either an array or a single object
+  const delivery = data?.ServiceDelivery?.StopMonitoringDelivery;
+  let visits: unknown[] = [];
+  if (Array.isArray(delivery)) {
+    visits = delivery[0]?.MonitoredStopVisit ?? [];
+  } else if (delivery) {
+    visits = delivery.MonitoredStopVisit ?? [];
   }
 
-  arrivals.sort((a, b) => a.minutes - b.minutes);
+  const arrivals: StoredArrival[] = [];
+
+  for (const visit of visits) {
+    const mvj = (visit as Record<string, unknown>)?.MonitoredVehicleJourney as
+      | Record<string, unknown>
+      | undefined;
+    const call = mvj?.MonitoredCall as Record<string, unknown> | undefined;
+    const timeStr =
+      (call?.ExpectedArrivalTime as string) ??
+      (call?.ExpectedDepartureTime as string) ??
+      (call?.AimedArrivalTime as string);
+    if (!timeStr) continue;
+
+    const arrivalTime = new Date(timeStr).getTime();
+    if (!Number.isNaN(arrivalTime)) {
+      arrivals.push({ arrivalTime });
+    }
+  }
+
+  arrivals.sort((a, b) => a.arrivalTime - b.arrivalTime);
   return arrivals.slice(0, 3);
 }
 
+/** Recompute display minutes from stored absolute timestamps */
+function computeDisplayRoutes(stored: StoredRoute[]): TransitRoute[] {
+  const now = Date.now();
+  return stored.map((r) => ({
+    routeName: r.routeName,
+    direction: r.direction,
+    stopName: r.stopName,
+    error: r.error,
+    arrivals: r.arrivals
+      .map((a) => ({
+        minutes: Math.max(0, Math.round((a.arrivalTime - now) / 60000)),
+      }))
+      .filter((a) => a.minutes >= 0),
+  }));
+}
+
 export function useTransit() {
-  const [routes, setRoutes] = useState<TransitRoute[]>(
+  // Store absolute timestamps between API fetches
+  const storedRef = useRef<StoredRoute[]>(
     TRANSIT_STOPS.map((s) => ({
       routeName: s.routeName,
       direction: s.direction,
       stopName: s.stopName,
       arrivals: [],
     }))
+  );
+
+  const [routes, setRoutes] = useState<TransitRoute[]>(
+    computeDisplayRoutes(storedRef.current)
   );
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isStale, setIsStale] = useState(false);
@@ -101,7 +129,7 @@ export function useTransit() {
               direction: stop.direction,
               stopName: stop.stopName,
               arrivals,
-            } as TransitRoute;
+            } as StoredRoute;
           } catch {
             return {
               routeName: stop.routeName,
@@ -109,12 +137,12 @@ export function useTransit() {
               stopName: stop.stopName,
               arrivals: [],
               error: 'Unable to load',
-            } as TransitRoute;
+            } as StoredRoute;
           }
         })
       );
-      setRoutes(results);
-      // Mark as successfully updated if at least one route loaded
+      storedRef.current = results;
+      setRoutes(computeDisplayRoutes(results));
       const anySuccess = results.some((r) => !r.error);
       if (anySuccess) {
         setLastUpdated(new Date());
@@ -127,11 +155,20 @@ export function useTransit() {
     }
   }, []);
 
+  // Fetch from 511 API at the configured interval
   useEffect(() => {
     fetchTransit();
     const interval = setInterval(fetchTransit, TRANSIT_REFRESH_MS);
     return () => clearInterval(interval);
   }, [fetchTransit]);
+
+  // Local countdown: recalculate displayed minutes every 15 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRoutes(computeDisplayRoutes(storedRef.current));
+    }, COUNTDOWN_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   return { routes, lastUpdated, isStale, refetch: fetchTransit };
 }
