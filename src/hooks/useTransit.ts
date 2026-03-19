@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TransitRoute } from '../types';
-import { TRANSIT_STOPS, TRANSIT_REFRESH_MS, API_BASE } from '../config';
+import { TRANSIT_STOPS, TRANSIT_REFRESH_MS } from '../config';
 
+const TRANSIT_API_KEY = '3ca48652-5b64-47fe-b4e4-15ef24009429';
 const COUNTDOWN_INTERVAL_MS = 15_000; // Recalculate displayed minutes every 15s
 
 // Stored arrival with absolute timestamp so we can recompute minutes locally
@@ -20,20 +21,112 @@ interface StoredRoute {
 async function fetchStopPredictions(
   stopId: string
 ): Promise<StoredArrival[]> {
-  const res = await fetch(`${API_BASE}/transit?stopId=${stopId}`);
-  if (!res.ok) throw new Error(`Transit proxy error: ${res.status}`);
-  const data = await res.json();
+  const apiUrl =
+    `https://api.511.org/transit/StopMonitoring` +
+    `?api_key=${TRANSIT_API_KEY}` +
+    `&agency=SF` +
+    `&stopCode=${stopId}` +
+    `&format=json`;
 
-  const now = Date.now();
-  // The proxy returns { arrivals: [{ minutes: N }] }
-  // Convert minutes back to absolute timestamps for local countdown
-  const arrivals: StoredArrival[] = (data.arrivals ?? []).map(
-    (a: { minutes: number }) => ({
-      arrivalTime: now + a.minutes * 60000,
-    })
-  );
+  // Try multiple approaches to handle CORS
+  let text: string | null = null;
 
-  return arrivals;
+  // 1. Try via Vite dev server proxy (works if dev server middleware is active)
+  try {
+    const proxyRes = await fetch(`/api/transit?stopId=${stopId}`);
+    if (proxyRes.ok) {
+      const proxyData = await proxyRes.json();
+      if (proxyData.arrivals) {
+        const now = Date.now();
+        return (proxyData.arrivals as { minutes: number }[]).map((a) => ({
+          arrivalTime: now + a.minutes * 60000,
+        }));
+      }
+    }
+  } catch {
+    // Proxy not available, continue to fallback
+  }
+
+  // 2. Try direct fetch (works if 511 sends CORS headers)
+  try {
+    const res = await fetch(apiUrl);
+    if (res.ok) {
+      text = await res.text();
+    }
+  } catch {
+    // CORS or network error — try proxy
+  }
+
+  // 3. Fallback: allorigins proxy
+  if (!text) {
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`;
+      const res = await fetch(proxyUrl);
+      if (res.ok) {
+        text = await res.text();
+      }
+    } catch {
+      // Try next proxy
+    }
+  }
+
+  // 4. Fallback: corsproxy.io
+  if (!text) {
+    const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`All fetch methods failed for stop ${stopId}`);
+    text = await res.text();
+  }
+
+  // Strip BOM
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
+
+  const data = JSON.parse(text);
+
+  // Log the response structure for debugging
+  console.log(`[transit] Stop ${stopId} response keys:`, Object.keys(data?.ServiceDelivery ?? {}));
+  const delivery = data?.ServiceDelivery?.StopMonitoringDelivery;
+  console.log(`[transit] StopMonitoringDelivery type:`, Array.isArray(delivery) ? 'array' : typeof delivery);
+
+  // Navigate the SIRI response structure
+  // Handle StopMonitoringDelivery as either an array or a single object
+  let visits: unknown[] = [];
+  if (Array.isArray(delivery)) {
+    // Could be an array of delivery objects
+    for (const d of delivery) {
+      const v = d?.MonitoredStopVisit;
+      if (Array.isArray(v)) {
+        visits = visits.concat(v);
+      }
+    }
+  } else if (delivery) {
+    visits = delivery.MonitoredStopVisit ?? [];
+  }
+  console.log(`[transit] Found ${visits.length} visits for stop ${stopId}`);
+
+  const arrivals: StoredArrival[] = [];
+
+  for (const visit of visits) {
+    const mvj = (visit as Record<string, unknown>)?.MonitoredVehicleJourney as
+      | Record<string, unknown>
+      | undefined;
+    const call = mvj?.MonitoredCall as Record<string, unknown> | undefined;
+    const timeStr =
+      (call?.ExpectedArrivalTime as string) ??
+      (call?.ExpectedDepartureTime as string) ??
+      (call?.AimedArrivalTime as string);
+    if (!timeStr) continue;
+
+    const arrivalTime = new Date(timeStr).getTime();
+    if (!Number.isNaN(arrivalTime)) {
+      arrivals.push({ arrivalTime });
+    }
+  }
+
+  arrivals.sort((a, b) => a.arrivalTime - b.arrivalTime);
+  return arrivals.slice(0, 3);
 }
 
 /** Recompute display minutes from stored absolute timestamps */
@@ -81,7 +174,8 @@ export function useTransit() {
               stopName: stop.stopName,
               arrivals,
             } as StoredRoute;
-          } catch {
+          } catch (err) {
+            console.error(`Transit fetch failed for ${stop.routeName} (${stop.stopId}):`, err);
             return {
               routeName: stop.routeName,
               direction: stop.direction,

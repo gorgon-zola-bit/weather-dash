@@ -9,8 +9,16 @@ function transitApiPlugin(): Plugin {
   return {
     name: 'transit-api',
     configureServer(server) {
-      server.middlewares.use('/api/transit', async (req, res) => {
-        const url = new URL(req.url ?? '/', 'http://localhost');
+      // Use a generic middleware and match the path ourselves
+      // to avoid connect's path-stripping behavior
+      server.middlewares.use(async (req, res, next) => {
+        const reqUrl = req.originalUrl ?? req.url ?? '';
+        if (!reqUrl.startsWith('/api/transit')) {
+          next();
+          return;
+        }
+
+        const url = new URL(reqUrl, 'http://localhost');
         const stopId = url.searchParams.get('stopId');
         if (!stopId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -28,6 +36,7 @@ function transitApiPlugin(): Plugin {
 
           const apiRes = await fetch(apiUrl);
           if (!apiRes.ok) {
+            console.error(`[transit-api] 511 API returned ${apiRes.status} for stop ${stopId}`);
             res.writeHead(502, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: `511 API error: ${apiRes.status}` }));
             return;
@@ -74,6 +83,7 @@ function transitApiPlugin(): Plugin {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ arrivals }));
         } catch (e) {
+          console.error(`[transit-api] Fetch failed for stop ${stopId}:`, e);
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Transit fetch failed' }));
         }
