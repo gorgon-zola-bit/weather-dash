@@ -11,7 +11,7 @@ function App() {
 
   return (
     <div className={`min-h-screen transition-colors ${dark ? 'bg-surface-dark' : 'bg-surface-light'}`}>
-      <div className="max-w-[1280px] mx-auto px-4 py-2 flex flex-col gap-2">
+      <div className="max-w-[1280px] mx-auto px-2 py-1.5 flex flex-col gap-1.5">
         {/* Weather Section */}
         <WeatherCard
           weather={weather}
