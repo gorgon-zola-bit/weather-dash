@@ -84,20 +84,20 @@ export function useWeather() {
         precipAmount: current.precipitation ?? 0,
       };
 
-      // Parse hourly data for today (future hours only, skip current hour)
+      // Parse hourly data for the next 24 hours (skip current hour)
       const hourlyTimes: string[] = data.hourly.time;
       const hourly: HourlyWeather[] = [nowEntry];
+      const nowMs = now.getTime();
+      const in24hMs = nowMs + 24 * 60 * 60 * 1000;
 
       for (let i = 0; i < hourlyTimes.length; i++) {
-        const timeStr = hourlyTimes[i]; // "2026-03-17T14:00"
-        const date = timeStr.slice(0, 10);
-        const hour = parseInt(timeStr.slice(11, 13), 10);
+        const timeMs = new Date(hourlyTimes[i]).getTime();
 
-        if (date === todayStr && hour > currentHour) {
+        if (timeMs > nowMs && timeMs <= in24hMs) {
           const weatherCode = data.hourly.weather_code[i];
           const isDay = data.hourly.is_day[i] === 1;
           hourly.push({
-            time: Math.floor(new Date(timeStr).getTime() / 1000),
+            time: Math.floor(timeMs / 1000),
             temp: Math.round(data.hourly.temperature_2m[i]),
             feelsLike: Math.round(data.hourly.apparent_temperature[i]),
             description: wmoDescription(weatherCode),

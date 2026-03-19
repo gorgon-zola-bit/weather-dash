@@ -55,7 +55,7 @@ export function WeatherCard({ weather, lastUpdated, isStale }: Props) {
       {weather.hourly.length > 0 && (
         <div className="mb-4">
           <h3 className="text-[0.85rem] font-medium text-muted-light dark:text-muted-dark mb-2">
-            Today — Hourly
+            Next 24 Hours
           </h3>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
             {weather.hourly.map((h) => (
