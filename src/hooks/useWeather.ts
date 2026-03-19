@@ -128,11 +128,12 @@ export function useWeather() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchWeather();
-    const interval = setInterval(fetchWeather, WEATHER_REFRESH_MS);
-    return () => clearInterval(interval);
-  }, [fetchWeather]);
+  // API calls disabled — site is taken down
+  // useEffect(() => {
+  //   fetchWeather();
+  //   const interval = setInterval(fetchWeather, WEATHER_REFRESH_MS);
+  //   return () => clearInterval(interval);
+  // }, [fetchWeather]);
 
   return { weather, lastUpdated, isStale, refetch: fetchWeather };
 }

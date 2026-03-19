@@ -200,20 +200,19 @@ export function useTransit() {
     }
   }, []);
 
-  // Fetch from 511 API at the configured interval
-  useEffect(() => {
-    fetchTransit();
-    const interval = setInterval(fetchTransit, TRANSIT_REFRESH_MS);
-    return () => clearInterval(interval);
-  }, [fetchTransit]);
+  // API calls disabled — site is taken down
+  // useEffect(() => {
+  //   fetchTransit();
+  //   const interval = setInterval(fetchTransit, TRANSIT_REFRESH_MS);
+  //   return () => clearInterval(interval);
+  // }, [fetchTransit]);
 
-  // Local countdown: recalculate displayed minutes every 15 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setRoutes(computeDisplayRoutes(storedRef.current));
-    }, COUNTDOWN_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, []);
+  // useEffect(() => {
+  //   const timer = setInterval(() => {
+  //     setRoutes(computeDisplayRoutes(storedRef.current));
+  //   }, COUNTDOWN_INTERVAL_MS);
+  //   return () => clearInterval(timer);
+  // }, []);
 
   return { routes, lastUpdated, isStale, refetch: fetchTransit };
 }
