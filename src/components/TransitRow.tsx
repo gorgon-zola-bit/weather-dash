@@ -6,7 +6,7 @@ interface Props {
 
 export function TransitRow({ route }: Props) {
   return (
-    <div className="rounded-2xl p-4 bg-card-light dark:bg-card-dark border border-border-light dark:border-border-dark flex items-center justify-between gap-3">
+    <div className="rounded-xl p-2 bg-card-light dark:bg-card-dark border border-border-light dark:border-border-dark flex items-center justify-between gap-2">
       <div className="min-w-0">
         <div className="text-[1.4rem] font-bold text-text-light dark:text-text-dark leading-tight truncate">
           {route.routeName}
