@@ -11,37 +11,37 @@ export const TRANSIT_STOPS: TransitStop[] = [
   {
     stopId: '14632',
     routeName: '22 Fillmore',
-    direction: 'Inbound',
+    direction: 'SB',
     stopName: 'Fillmore St & Oak St',
   },
   {
     stopId: '14631',
     routeName: '22 Fillmore',
-    direction: 'Outbound',
+    direction: 'NB',
     stopName: 'Fillmore St & Oak St',
   },
   {
     stopId: '14447',
     routeName: 'N Judah',
-    direction: 'Inbound',
+    direction: 'EB',
     stopName: 'Duboce Ave & Church St',
   },
   {
     stopId: '14448',
     routeName: 'N Judah',
-    direction: 'Outbound',
+    direction: 'WB',
     stopName: 'Duboce Ave & Church St',
   },
   {
     stopId: '14953',
     routeName: '7 Haight/Noriega',
-    direction: 'Inbound',
+    direction: 'EB',
     stopName: 'Haight St & Fillmore St',
   },
   {
     stopId: '14952',
     routeName: '7 Haight/Noriega',
-    direction: 'Outbound',
+    direction: 'WB',
     stopName: 'Haight St & Fillmore St',
   },
 ];
